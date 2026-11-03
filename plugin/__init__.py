@@ -662,6 +662,7 @@ class CommandHandler:
             "smart_connect":          self.smart_connect,
             "arrange_nodes":          self.arrange_nodes,
             "execute_code":           self.execute_code,
+            "render_node_preview":    self.render_node_preview,
             # ── Documentation ──
             "list_documentation":     self.list_documentation,
         }
@@ -2171,6 +2172,57 @@ class CommandHandler:
             return {"status": "ok", "result": result}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    def render_node_preview(self, node_id, graph_identifier=None,
+                            output_port=None, output_path=None):
+        """Compute the graph and save one node output texture as PNG.
+
+        SD only fills node output textures while the graph is open in the
+        editor, so the graph is opened first. compute() blocks until done.
+        """
+        import os
+        import tempfile
+
+        graph = self._resolve_graph(graph_identifier)
+        try:
+            self._ui_mgr().openResourceInEditor(graph)
+        except Exception as e:
+            _log("render_node_preview: open in editor failed: {}".format(e))
+
+        node = self._find_node(graph, node_id)
+        out_cat = sd.api.sdproperty.SDPropertyCategory.Output
+        outputs = [p for p in node.getProperties(out_cat)
+                   if p.getType().getClassName() == "SDTypeTexture"]
+        if not outputs:
+            raise ValueError("Node '{}' has no texture outputs.".format(node_id))
+        if output_port:
+            outputs = [p for p in outputs if p.getId() == output_port]
+            if not outputs:
+                raise ValueError("Output port '{}' not found on node '{}'.".format(
+                    output_port, node_id))
+        prop = outputs[0]
+
+        graph.compute()
+        value = node.getPropertyValue(prop)
+        if value is None:
+            raise RuntimeError(
+                "No texture for '{}.{}' after compute (node may be a "
+                "non-image output or the graph is not displayed).".format(
+                    node_id, prop.getId()))
+        texture = value.get()
+
+        if not output_path:
+            output_path = os.path.join(
+                tempfile.gettempdir(),
+                "sd_preview_{}_{}.png".format(graph.getIdentifier(), node_id))
+        texture.save(output_path)
+        size = texture.getSize()
+        return {
+            "path":   output_path,
+            "port":   prop.getId(),
+            "width":  int(size.x),
+            "height": int(size.y),
+        }
 
     def execute_code(self, code):
         """Execute arbitrary Python on the SD main thread. Keep it short."""
