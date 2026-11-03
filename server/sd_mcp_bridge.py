@@ -1181,6 +1181,37 @@ async def render_outputs(ctx: Context,
 
 
 @mcp.tool()
+async def render_node_preview(ctx: Context,
+                              node_id: str,
+                              graph_identifier: Optional[str] = None,
+                              output_port: Optional[str] = None,
+                              thumbnail_size: int = 256,
+                              normalize_grayscale: bool = True) -> list:
+    """
+    Compute a graph and LOOK at ONE node's texture (any node, not only output
+    nodes): statistics plus a PNG thumbnail as image. Use it to check
+    intermediate steps while building a graph; render_outputs covers the
+    finished output nodes.
+    - node_id: node to inspect (see get_graph_info)
+    - output_port: texture output port id (None = first texture output)
+    - thumbnail_size: max side in px (16-1024)
+    """
+    raw = await _async_send("render_node_preview", {
+        "node_id": node_id, "graph_identifier": graph_identifier,
+        "output_port": output_port, "thumbnail_size": thumbnail_size,
+        "normalize_grayscale": normalize_grayscale})
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return [raw]  # error text from the plugin
+    b64 = data.pop("thumbnail_png_base64", None)
+    content = [json.dumps(data, indent=2)]
+    if b64:
+        content.append(Image(data=base64.b64decode(b64), format="png"))
+    return content
+
+
+@mcp.tool()
 async def export_outputs(ctx: Context,
                          directory: str,
                          graph_identifier: Optional[str] = None,

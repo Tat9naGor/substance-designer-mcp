@@ -20,6 +20,7 @@ import re
 import struct
 import time
 import base64
+import zlib
 
 from sd.api.sdproperty import SDPropertyCategory
 
@@ -112,10 +113,22 @@ def _stats(w, h, channels, rows):
     }
 
 
+def _png_bytes(w, h, rgba):
+    """Minimal RGBA8 PNG writer (no Qt: SD 14 ships PySide2, SD 15+ PySide6)."""
+    def chunk(tag, data):
+        body = tag + data
+        return (struct.pack(">I", len(data)) + body
+                + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF))
+    stride = w * 4
+    raw = b"".join(b"\x00" + rgba[y * stride:(y + 1) * stride] for y in range(h))
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 6))
+            + chunk(b"IEND", b""))
+
+
 def _encode_png(w, h, channels, rows, normalize=False):
-    """Encode sampled pixels as PNG bytes using Qt (bundled with SD)."""
-    from PySide6.QtGui import QImage
-    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+    """Encode sampled pixels as PNG bytes."""
     lo, hi = 0.0, 1.0
     if normalize:
         flat = [v for r in rows for i, v in enumerate(r) if channels == 1 or i % 4 != 3]
@@ -137,13 +150,7 @@ def _encode_png(w, h, channels, rows, normalize=False):
                               int(max(0.0, min(1.0, (gg - lo) / span)) * 255 + 0.5),
                               int(max(0.0, min(1.0, (bb - lo) / span)) * 255 + 0.5),
                               255))
-    img = QImage(bytes(buf), w, h, w * 4, QImage.Format_RGBA8888).copy()
-    ba = QByteArray()
-    qbuf = QBuffer(ba)
-    qbuf.open(QIODevice.WriteOnly)
-    img.save(qbuf, "PNG")
-    qbuf.close()
-    return bytes(ba.data())
+    return _png_bytes(w, h, bytes(buf))
 
 
 class RenderMixin(object):
@@ -237,6 +244,65 @@ class RenderMixin(object):
                 "material_model": self._graph_material_model(graph),
                 "compute_seconds": compute_s, "output_count": len(outputs),
                 "warnings": warnings, "outputs": outputs}
+
+    def render_node_preview(self, node_id, graph_identifier=None, output_port=None,
+                            thumbnails=True, thumbnail_size=256,
+                            normalize_grayscale=True):
+        """Compute the graph and return stats + a PNG thumbnail (base64) of ONE
+        node's texture output, for checking intermediate steps while building.
+
+        SD does not reliably expose textures of arbitrary nodes (isolated or
+        freshly edited ones read back as None; verified on SD 14.1.1), but a
+        graph output node always has one after compute(). So the node is routed
+        through a temporary output node, which is deleted again."""
+        graph = self._resolve_graph(graph_identifier)
+        node = self._find_node(graph, node_id)
+        thumbnail_size = max(16, min(int(thumbnail_size or 256), 1024))
+        textures = [p for p in node.getProperties(SDPropertyCategory.Output)
+                    if p.getType().getClassName() == "SDTypeTexture"]
+        if output_port:
+            textures = [p for p in textures if p.getId() == output_port]
+        if not textures:
+            raise ValueError("Node '{}' has no texture output{}.".format(
+                node_id, " '{}'".format(output_port) if output_port else ""))
+        prop = textures[0]
+
+        tmp = None
+        t0 = time.time()
+        try:
+            if node.getDefinition().getId() == "sbs::compositing::output":
+                src = node
+            else:
+                tmp = graph.newNode("sbs::compositing::output")
+                node.newPropertyConnectionFromId(prop.getId(), tmp, "inputNodeOutput")
+                src = tmp
+            graph.compute()
+            tex = self._output_texture(src)
+            if tex is None:  # same occasional miss as in render_outputs
+                graph.compute()
+                tex = self._output_texture(src)
+            if tex is None:
+                raise RuntimeError("No texture for '{}.{}' after compute.".format(
+                    node_id, prop.getId()))
+            size = tex.getSize()
+            w, h, ch, rows, fmt = _sample_texture(tex, thumbnail_size)
+            result = {"graph": graph.getIdentifier(), "node_id": node_id,
+                      "port": prop.getId(), "size": [int(size.x), int(size.y)],
+                      "format": fmt, "stats": _stats(w, h, ch, rows),
+                      "compute_seconds": round(time.time() - t0, 3)}
+            if thumbnails:
+                norm = bool(normalize_grayscale and ch == 1)
+                result["thumbnail_png_base64"] = base64.b64encode(
+                    _encode_png(w, h, ch, rows, normalize=norm)).decode("ascii")
+                result["thumbnail_size"] = [w, h]
+                result["thumbnail_normalized"] = norm
+            return result
+        finally:
+            if tmp is not None:
+                try:
+                    graph.deleteNode(tmp)
+                except SDError:
+                    pass
 
     def export_outputs(self, directory, graph_identifier=None, output_ids=None,
                        file_format="png", name_pattern="{graph}_{identifier}",

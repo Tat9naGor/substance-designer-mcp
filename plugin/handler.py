@@ -70,6 +70,7 @@ class CommandHandler(SDContextMixin, LibraryMixin, SceneToolsMixin, NodeToolsMix
             "build_sdf_scene":         self.build_sdf_scene,
             "set_shape_splatter_sdf":  self.set_shape_splatter_sdf,
             "render_outputs":          self.render_outputs,
+            "render_node_preview":     self.render_node_preview,
             "export_outputs":          self.export_outputs,
             "validate_library":        self.validate_library,
             "close_package":           self.close_package,
