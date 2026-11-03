@@ -2202,21 +2202,39 @@ class CommandHandler:
                     output_port, node_id))
         prop = outputs[0]
 
-        graph.compute()
-        value = node.getPropertyValue(prop)
-        if value is None:
-            raise RuntimeError(
-                "No texture for '{}.{}' after compute (node may be a "
-                "non-image output or the graph is not displayed).".format(
-                    node_id, prop.getId()))
-        texture = value.get()
+        # SD does not reliably expose textures of arbitrary nodes (isolated or
+        # freshly edited ones read back as None), but a graph output node always
+        # has one after compute(). So route the node through a temporary one.
+        is_output = self._get_node_def_id(node) == "sbs::compositing::output"
+        tmp = None
+        try:
+            if is_output:
+                src, src_prop = node, prop
+            else:
+                tmp = graph.newNode("sbs::compositing::output")
+                node.newPropertyConnectionFromId(prop.getId(), tmp, "inputNodeOutput")
+                src = tmp
+                src_prop = tmp.getProperties(out_cat)[0]
+            graph.compute()
+            value = src.getPropertyValue(src_prop)
+            if value is None:
+                raise RuntimeError(
+                    "No texture for '{}.{}' after compute.".format(
+                        node_id, prop.getId()))
+            texture = value.get()
 
-        if not output_path:
-            output_path = os.path.join(
-                tempfile.gettempdir(),
-                "sd_preview_{}_{}.png".format(graph.getIdentifier(), node_id))
-        texture.save(output_path)
-        size = texture.getSize()
+            if not output_path:
+                output_path = os.path.join(
+                    tempfile.gettempdir(),
+                    "sd_preview_{}_{}.png".format(graph.getIdentifier(), node_id))
+            texture.save(output_path)
+            size = texture.getSize()
+        finally:
+            if tmp is not None:
+                try:
+                    graph.deleteNode(tmp)
+                except Exception as e:
+                    _log("render_node_preview: temp node cleanup failed: {}".format(e))
         return {
             "path":   output_path,
             "port":   prop.getId(),

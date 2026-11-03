@@ -41,7 +41,7 @@ venv_site = os.path.join(script_dir, '.venv', 'Lib', 'site-packages')
 if os.path.exists(venv_site):
     sys.path.insert(0, venv_site)
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import FastMCP, Context, Image
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -670,6 +670,37 @@ async def execute_sd_code(ctx: Context, code: str) -> str:
     Keep code short, simple, and non-blocking.
     """
     return await _async_send("execute_code", {"code": code})
+
+
+@mcp.tool()
+async def render_node_preview(ctx: Context,
+                              node_id: str,
+                              graph_identifier: Optional[str] = None,
+                              output_port: Optional[str] = None,
+                              output_path: Optional[str] = None):
+    """
+    Compute the graph and return one node's output texture as an image,
+    so the result can be checked visually.
+    - node_id: node whose output to render
+    - graph_identifier: target graph (None = current). It is opened in the
+      SD editor first (SD only produces textures for the open graph).
+    - output_port: texture output port id (None = first texture output)
+    - output_path: where to save the PNG (None = temp dir)
+
+    Blocks while SD computes; avoid on very heavy graphs.
+    """
+    text = await _async_send("render_node_preview", {
+        "node_id": node_id,
+        "graph_identifier": graph_identifier,
+        "output_port": output_port,
+        "output_path": output_path,
+    })
+    try:
+        info = json.loads(text)
+        path = info["path"]
+    except (ValueError, KeyError, TypeError):
+        return text  # error string from _send
+    return [text, Image(path=path)]
 
 
 @mcp.tool()
