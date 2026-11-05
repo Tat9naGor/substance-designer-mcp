@@ -160,6 +160,23 @@ checks (`update_port_snapshot.py` for `auto_levels`, full regression) before pro
   version-gate table and the PNG encoder.
 - CHANGELOG entry per phase.
 
+**Status: done (2026-11-05), branch `branch/sd14/phase6-docs`.**
+- README: fork notice, "SD 14.1.1 support" section, "SD 14.1.x Notes", 14.1.x in requirements
+  and architecture, `render_node_preview` in the tool table, `deploy.ps1`, per-version tests.
+- CHANGELOG `[1.9.0]` (one entry for the whole SD 14 work); plugin 3.11.0, bridge 2.4.0 so
+  `get_scene_info` shows which plugin is loaded.
+- CLAUDE.md was rewritten earlier (modular plugin, version table, two-installs pitfall).
+- Offline tests cover the version table, PNG encoder, SD 14 settings layout, per-version port
+  snapshots and the `render_node_preview` bridge tool (21 tests).
+- Still to verify after the next SD + Claude restart: `get_scene_info` -> plugin 3.11.0, and
+  the `render_node_preview` wrong-port message in the live plugin.
+
+## Next steps
+- Rerun on SD 16 (available): `update_port_snapshot.py` (drops `auto_levels` from `UNMEASURED`),
+  full regression, then propose the `branch/sd-agnostic/*` and gate work upstream.
+- Optional: tune `terracotta` (height still mostly white, mean ~0.9).
+- The `skills/` texts describe SD 16 pitfalls; review them for SD 14 if they are used with it.
+
 ## Branch layout
 - `branch/sd-agnostic/*`: version-independent improvements (previews, PNG encoder, gates).
   Candidates for an upstream PR to yang1190 / the original.

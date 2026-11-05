@@ -4,6 +4,43 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.9.0] — 2026-11-05 — Substance 3D Designer 14.1.1 support
+
+### Plugin (v3.11.0)
+- **SD 14.1.1 support** (Python 3.11.6, PySide6 6.5.7), SD 15 / 16 behaviour unchanged.
+- `common._sd_caps()`: one table of version-dependent features. Output usages on SD 14 and 16+
+  (`SDUsage.sNew()` probed safe on 14.1.1; it hung 15.0.3), graph material model on 16+;
+  `SD_MCP_FORCE_USAGES=1/0` overrides. `diagnostic` reports `sd_caps`.
+- Output nodes get their identifier (`height`, `basecolor`...) even where usages are off.
+- **`render_node_preview`**: statistics + PNG thumbnail of any node's texture, routed through a
+  temporary output node (a node's own texture is not reliably readable after `compute()`);
+  `output_port` for multi-output nodes, a wrong port lists the valid ones.
+- Thumbnails are encoded in pure Python (no PySide import in `render.py`).
+- `library_paths.sd_settings_dir`: finds SD 14's flat settings folder (no `<major.minor>`
+  subfolder), so custom Library folders from SD 14's Preferences are used.
+- `terracotta`: `auto_levels` after Cells 1 (SD 14's Cells 1 outputs ~0.63-1.0 and the recipe
+  went flat). New `LIB["auto_levels"]`.
+- Knowledge base: `sd14_notes`.
+
+### Bridge Server (v2.4.0)
+- `render_node_preview` tool (JSON statistics + MCP image).
+
+### Tests
+- `run_regression.py`: baseline per SD major (`regression_baseline_sd<major>.json`), SD 16 checks
+  skipped below 16, pixel-processor check on every version. First SD 14.1.1 run: 97/98
+  (`terracotta`), after the fix 98/98.
+- Port snapshots per version: `tests/data/sd_node_ports_sd14.json` (measured on 14.1.1),
+  `sd_node_ports_sd16.json` (renamed); the offline test checks every recipe against each.
+- Offline tests for the version table, the PNG encoder, the SD 14 settings layout and the
+  `render_node_preview` bridge tool.
+
+### Tooling / docs
+- `scripts/deploy.ps1`: deploy the plugin package with a backup outside `sduserplugins`.
+- `CLAUDE.md` rewritten for the modular plugin; `docs/SD14_UPGRADE_PLAN.md` (measured facts and
+  phases).
+
+---
+
 ## [1.8.2] — 2026-10-22 — Skills: broken stone tiles breakdown
 
 ### Skills (`sd-material-skills` v1.0.2)

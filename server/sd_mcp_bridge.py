@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-sd_mcp_bridge.py - Substance Designer MCP Bridge v2.3.1
+sd_mcp_bridge.py - Substance Designer MCP Bridge v2.4.0
 
 Relay between Claude (stdio/FastMCP) and the SD plugin (TCP).
 
@@ -198,7 +198,7 @@ async def _async_send(cmd_type: str, params: dict = None) -> str:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(app: FastMCP):
-    logger.info(f"Substance Designer MCP Bridge v2.3.1 -> SD plugin on port {_sd_port}")
+    logger.info(f"Substance Designer MCP Bridge v2.4.0 -> SD plugin on port {_sd_port}")
     logger.info("Ensure Substance Designer is running with the MCP plugin loaded.")
     yield {}
     logger.info("Substance Designer MCP bridge shutting down.")
@@ -1274,13 +1274,13 @@ async def list_material_models(ctx: Context) -> str:
 def main():
     global _sd_port
 
-    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.3.1")
+    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.4.0")
     parser.add_argument("--port", type=int, default=9881,  # BUG-B03 fix: default is 9881
                         help="TCP port to connect to the SD plugin (default: 9881)")
     args = parser.parse_args()
     _sd_port = args.port
 
-    logger.info(f"SD MCP Bridge v2.3.1 -> SD plugin on port {_sd_port}")
+    logger.info(f"SD MCP Bridge v2.4.0 -> SD plugin on port {_sd_port}")
     mcp.run()
 
 

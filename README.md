@@ -11,6 +11,10 @@ Control Substance Designer from any MCP-compatible AI client (Claude Code, Claud
 > This fork, maintained by [@yang1190](https://github.com/yang1190), adds **Substance 3D Designer 16.0.x** support
 > (function graphs, SDF, Shape splatter v2, OpenPBR) and several bug fixes — see
 > [What's new in this fork](#whats-new-in-this-fork-sd-16) and the [CHANGELOG](CHANGELOG.md).
+>
+> This fork of yang1190's fork, maintained by [@Tat9naGor](https://github.com/Tat9naGor), adds
+> **Substance 3D Designer 14.1.1** support behind version gates (SD 15 / 16 behaviour unchanged)
+> and `render_node_preview` — see [SD 14.1.1 support](#sd-1411-support).
 
 ---
 
@@ -18,10 +22,41 @@ Control Substance Designer from any MCP-compatible AI client (Claude Code, Claud
 
 - **Natural language → SD graph**: "Create a cracked concrete material" → 44-node PBR graph with height, normal, roughness, AO, baseColor, metallic outputs
 - **79 built-in material recipes**: pro-grade materials using the same node architecture as professional SD artists
-- **44 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
+- **45 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
 - **Library node support**: Clouds, Cells, Perlin Noise, Polygon, Edge Detect, Flood Fill, Multi-Directional Warp, etc.
 - **Custom Library folders**: your own / third-party `.sbs` packages (SD's Library watched paths, `add_library_path`) are indexed and usable like built-in nodes
 - **Thread-safe**: All SD API calls dispatched to Qt main thread via Signal/Slot queued connection
+
+---
+
+## SD 14.1.1 support
+
+Tested on **Adobe Substance 3D Designer 14.1.1** (Python 3.11.6, PySide6 6.5.7). SD 15 / 16 code
+paths are kept and selected at runtime (`common._sd_caps()`).
+
+- **Validation on 14.1.1**: full regression 98/98 — 79/79 material recipes, 8/8 heightmap styles,
+  475/475 visible Library graphs, pixel-processor function graph. The SD 16-only checks (OpenPBR,
+  SDF, Shape splatter v2) are skipped on 14.
+- **Output usages on 14**: `SDUsage.sNew()` is safe on 14.1.1 (it hung 15.0.3), so output nodes
+  get usages and identifiers (`height`, `basecolor`...) and the 3D view picks them up.
+- **`render_node_preview`**: look at **any** node's texture (not only output nodes) while
+  building: statistics + PNG thumbnail as an image. Reading a node's own texture after
+  `compute()` is unreliable in SD, so the node is routed through a temporary output node that is
+  deleted afterwards. Works without the graph open in the editor; 8/16-bit and 16F/32F formats.
+- **Qt-free thumbnails**: PNGs are encoded in pure Python (no PySide dependency in `render.py`).
+- **SD 14 settings folder**: SD 14 keeps its `.sbsprj` files directly in
+  `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/` (no version subfolder); custom Library
+  folders from SD's Preferences are found there.
+- **`terracotta` recipe**: SD 14's Cells 1 outputs ~0.63–1.0, which made the recipe flat;
+  `auto_levels` after Cells 1 fixes it (no-op where Cells is already 0–1).
+- **Tests per SD version**: port snapshots `tests/data/sd_node_ports_sd14.json` /
+  `_sd16.json`, regression baselines `tests/regression_baseline_sd14.json` /
+  `regression_baseline.json` (SD 16), picked automatically.
+- **`scripts/deploy.ps1`**: copies the plugin into `sduserplugins` and backs up the previous one
+  outside that folder.
+
+Not available on 14 (the SD API / library lacks them): graph material models (OpenPBR), the 3D SDF
+library and Shape splatter v2 — those tools answer with a clear "SD 16+" message.
 
 ---
 
@@ -59,10 +94,10 @@ AI Client (Claude / Cursor)
 sd_mcp_bridge.py  (FastMCP server, Python 3.12)
         │  TCP localhost:9881 (length-prefix framing)
         ▼
-SD plugin package plugin/  (runs inside SD: Python 3.11 on SD 15 / 3.13 on SD 16)
+SD plugin package plugin/  (runs inside SD: Python 3.11 on SD 14/15 / 3.13 on SD 16)
         │  sd.api
         ▼
-Adobe Substance 3D Designer 15.x / 16.0.x
+Adobe Substance 3D Designer 14.1.x / 15.x / 16.0.x
 ```
 
 The bridge and plugin communicate with a simple length-prefix framing protocol: `[4-byte big-endian length][JSON payload]`. Each command uses a fresh TCP socket — no persistent connection, no stale state.
@@ -71,7 +106,7 @@ The bridge and plugin communicate with a simple length-prefix framing protocol: 
 
 ## Requirements
 
-- **Adobe Substance 3D Designer 16.0.x** (tested on 16.0.5) or **15.x** (tested on 15.0.3)
+- **Adobe Substance 3D Designer 16.0.x** (tested on 16.0.5), **15.x** (tested on 15.0.3) or **14.1.x** (tested on 14.1.1)
 - **Python 3.12+** for the bridge (managed via [uv](https://github.com/astral-sh/uv))
 - **uv** package manager: `pip install uv` or `winget install astral-sh.uv`
 - An MCP-compatible client: [Claude Code](https://claude.ai/code), [Claude Desktop](https://claude.ai/desktop), or [Cursor](https://cursor.sh)
@@ -109,6 +144,8 @@ sd_mcp_plugin/           ← copy every .py file from plugin/
 ```
 
 When updating, copy **all** files and delete `__pycache__/`, then restart SD.
+On Windows `.\scripts\deploy.ps1` does this (and backs up the previous plugin outside
+`sduserplugins`, so SD does not load the backup).
 
 SD auto-loads all plugins from `sduserplugins/` on startup. No additional configuration needed.
 
@@ -204,6 +241,7 @@ List all available material recipes
 | **`build_sdf_scene`** | **SD 16+: build an SDF scene and render it with 3D viewer node(s) (beauty, depth, normals, material ID...)** |
 | **`set_shape_splatter_sdf`** | **SD 16+: scatter a custom SDF shape with Shape splatter v2** |
 | **`render_outputs`** | **Compute a graph and return per-output stats + PNG thumbnails (images) so the AI can check its result** |
+| **`render_node_preview`** | **Stats + PNG thumbnail of ANY node's texture (intermediate steps), `output_port` for multi-output nodes** |
 | `export_outputs` | Compute and save output textures (png / tga / exr / tif / jpg) |
 | `validate_library` | Instantiate every Library graph (batched) — health check after an SD update (`source='custom'` for custom folders) |
 | `get_library_nodes` | Search built-in + custom Library graphs (`source`: all / builtin / custom / loaded; matches identifier, label, category) |
@@ -292,6 +330,18 @@ Or copy `skills/<name>/` into `~/.claude/skills/`, or upload `skills/packages/*.
 
 ---
 
+## SD 14.1.x Notes
+
+- The running SD must be the **Adobe** install (`C:\Program Files\Adobe\Adobe Substance 3D Designer`);
+  a leftover `C:\Program Files\Allegorithmic\Substance Designer` is an older product with other
+  node names — do not point anything at it.
+- Version-dependent behaviour is listed in one place, `plugin/common.py::_sd_caps()`
+  (`diagnostic` reports it as `sd_caps`).
+- The SD 14 Library has every graph the recipes use; port ids match SD 16, SD 16 only adds
+  parameters (`cells_1` +10, `clouds_2` +4, `perlin_noise` +2...) that no recipe uses.
+- `$format` set on a Library instance does not change its output format (the library graph
+  defines it); on atomic nodes it does.
+
 ## SD 16.0.x Notes
 
 - Library nodes are resolved by **graph identifier** from `<SD>/resources/packages` and loaded on demand. Pass `clouds_2`, `pkg:///clouds_2` or a full URL — `?dependency=N` UIDs are session-specific and no longer required.
@@ -322,7 +372,7 @@ build_sdf_scene(graph_name="Knob", outputs=["beauty", "depth"], output="mat", no
 These are hard constraints of the SD 15.x API — violating them hangs or crashes SD:
 
 - **ONE tool call at a time** — never parallel calls to SD tools
-- `SDUsage.sNew()` **hangs SD 15 permanently** — only used on SD 16+ (verified OK on 16.0.5)
+- `SDUsage.sNew()` **hangs SD 15 permanently** — only used on SD 14 and 16+ (probed safe on 14.1.1, OK on 16.0.5)
 - `newNode(unknown_definition)` **hangs SD 15 permanently** — plugin validates before calling
 - ~~`arrange_nodes()` destroys all connections~~ — not true: it only moves nodes (verified on SD 16.0.5, connections and outputs unchanged). Since plugin 3.8.0 it lays the graph out by data flow
 - Library node outputs are **never** `"unique_filter_output"` — always call `get_node_info` first
@@ -377,11 +427,13 @@ python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 | performance | a recipe that takes more than 10 s to render at 256 px |
 | library | every graph visible in SD's Library instantiates (`validate_library`) |
 | custom_library | the built-in root is indexed; every visible graph in custom Library folders instantiates (`validate_library(source='custom')`) |
-| sd16 | OpenPBR identifiers / dual usages, SDF scene, Shape splatter v2 SDF rock, pixel-processor function |
+| function_graphs | pixel-processor function graph (every SD version) |
+| sd16 | SD 16+ only: OpenPBR identifiers / dual usages, SDF scene, Shape splatter v2 SDF rock |
 
-Known problems live in `tests/regression_baseline.json`: they are reported as **KNOWN** and do not fail the run; a listed problem that passes is reported as **FIXED** (remove it from the baseline). Any other failure is **FAIL** and the script exits with code 1. Reports (Markdown + JSON with all statistics) are written to `tests/reports/`.
+Known problems live in `tests/regression_baseline_sd<major>.json` (falls back to `tests/regression_baseline.json`, the SD 16 baseline): they are reported as **KNOWN** and do not fail the run; a listed problem that passes is reported as **FIXED** (remove it from the baseline). Any other failure is **FAIL** and the script exits with code 1. Reports (Markdown + JSON with all statistics) are written to `tests/reports/`.
 
 The first run on SD 16.0.5 found 12 recipes with flat / low-contrast outputs and 3 slow fabric recipes; all were fixed in plugin 3.7.0 and the baseline is now empty (latest full run with plugin 3.10.0: 102 pass, 0 known, 0 fail).
+On SD 14.1.1 the first full run found one flat recipe (`terracotta`, see above); after the fix: 98 pass, 0 known, 0 fail.
 
 ---
 
