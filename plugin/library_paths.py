@@ -85,8 +85,10 @@ def _version_key(name):
 
 
 def sd_settings_dir(version=None, bases=None):
-    """SD's per-version settings folder ('.../16.0'). With a version string
-    ('16.0.5') the matching major.minor folder is used, otherwise the newest."""
+    """SD's settings folder. SD 16 keeps one per version ('.../16.0'); SD 14
+    keeps its .sbsprj files directly in the base folder. With a version string
+    ('16.0.5') the matching major.minor folder is used, else the base folder
+    when it holds project files, else the newest version folder."""
     want = None
     if version:
         parts = str(version).split(".")
@@ -96,10 +98,16 @@ def sd_settings_dir(version=None, bases=None):
             continue
         if want and os.path.isdir(os.path.join(base, want)):
             return norm_path(os.path.join(base, want))
+        flat = any(os.path.isfile(os.path.join(base, f))
+                   for f in ("default_project.sbsprj", "user_project.sbsprj"))
+        if want and flat:
+            return norm_path(base)
         vers = [d for d in os.listdir(base)
                 if _version_key(d) and os.path.isdir(os.path.join(base, d))]
         if vers:
             return norm_path(os.path.join(base, max(vers, key=_version_key)))
+        if flat:
+            return norm_path(base)
     return None
 
 

@@ -357,6 +357,13 @@ class TestLibraryPaths(unittest.TestCase):
         self.assertTrue(LP.sd_settings_dir("16.0.5", [self.settings]).endswith("/16.0"))
         self.assertTrue(LP.sd_settings_dir(None, [self.settings]).endswith("/16.0"))
         self.assertTrue(LP.sd_settings_dir("15.1.2", [self.settings]).endswith("/15.1"))
+        # SD 14: project files live directly in the base folder
+        self.assertIsNone(LP.sd_settings_dir("14.1.1", [os.path.join(self.root, "cfg")]))
+        with open(os.path.join(self.settings, "user_project.sbsprj"), "w", encoding="utf-8") as fh:
+            fh.write(_USER_PRJ.format(root=self.root.lstrip("/")))
+        self.assertEqual(LP.sd_settings_dir("14.1.1", [self.settings]),
+                         LP.norm_path(self.settings))
+        self.assertTrue(LP.sd_settings_dir("16.0.5", [self.settings]).endswith("/16.0"))
         self.assertEqual(LP.file_url_to_path("file:///C:/A%20B/c"), "C:/A B/c")
         self.assertEqual(LP.file_url_to_path("sbs://x", {"sbs": "C:/sd/pk"}), "C:/sd/pk/x")
         self.assertEqual(LP.file_url_to_path("sbs://", {"sbs": "C:/sd/pk"}), "C:/sd/pk")

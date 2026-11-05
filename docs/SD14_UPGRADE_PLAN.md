@@ -86,6 +86,17 @@ Done when: SD16-only tools fail with a readable message on 14, never hang or cra
 
 Done when: `validate_library` reports 0 failures (or a documented known-broken list).
 
+**Status: done (2026-11-05), branch `branch/sd14/phase2-library`.**
+- `validate_library(source="builtin")` on 14.1.1: 475/475 visible graphs instantiate, 0 failures,
+  ~95 s total; no packages left behind.
+- `get_library_nodes` and `create_instance_node('perlin_noise')` verified in Phase 0.
+- Fix: `library_paths.sd_settings_dir` now finds SD 14's flat settings folder
+  (`%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/*.sbsprj`, no `<major.minor>` subfolder).
+  Checked inside the running SD: settings dir found, watched paths read from
+  `default_project.sbsprj`, built-in root not duplicated. Custom Library folders from SD
+  Preferences will now be picked up (none configured at the moment). Offline test added.
+- `list_library_paths` through the tool shows the fix only after an SD restart (plugin deployed).
+
 ### Phase 3: Regression on 14 (the real work)
 1. Run `tests/run_regression.py`: 79 recipes + 8 heightmaps + library + performance.
 2. Save the result as `tests/regression_baseline_sd14.json` (the existing baseline is SD 16.0.5;
