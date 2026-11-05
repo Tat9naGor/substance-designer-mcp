@@ -8,9 +8,9 @@ An MCP integration that lets AI clients drive Adobe Substance 3D Designer: build
 and connect nodes, set parameters, build materials from recipes, and look at the result
 (thumbnails + pixel statistics).
 
-This fork: `Tat9naGor/substance-designer-mcp` (remote `zai`), based on `yang1190`'s fork
-(remote `yang1190`, SD 15/16, modular plugin), itself a fork of `matthieuhuguet`'s original
-(remote `origin`, SD 15). Goal of this fork: **Substance 3D Designer 14.1.1** support, keeping
+This fork: `Tat9naGor/substance-designer-mcp` (remote `origin`, push default), based on `yang1190`'s
+fork (remote `yang1190`, SD 15/16, modular plugin), itself a fork of `matthieuhuguet`'s original
+(remote `upstream`, SD 15). Goal of this fork: **Substance 3D Designer 14.1.1** support, keeping
 15/16 behind version gates. Plan and measured facts: `docs/SD14_UPGRADE_PLAN.md`.
 
 ## Architecture
