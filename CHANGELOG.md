@@ -36,8 +36,12 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ### Tooling / docs
 - `scripts/deploy.ps1`: deploy the plugin package with a backup outside `sduserplugins`.
-- `CLAUDE.md` rewritten for the modular plugin; `docs/SD14_UPGRADE_PLAN.md` (measured facts and
-  phases).
+- `CLAUDE.md` rewritten for the modular plugin.
+
+### Not re-tested
+- The full suite ran on SD 14.1.1 only. SD 15 / 16 paths are unchanged by design; the changes that
+  touch every version are the `terracotta` `auto_levels` node and output identifiers being set
+  without usages (SD 15). `auto_levels` is not in the SD 16 port snapshot yet.
 
 ---
 

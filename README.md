@@ -11,10 +11,6 @@ Control Substance Designer from any MCP-compatible AI client (Claude Code, Claud
 > This fork, maintained by [@yang1190](https://github.com/yang1190), adds **Substance 3D Designer 16.0.x** support
 > (function graphs, SDF, Shape splatter v2, OpenPBR) and several bug fixes — see
 > [What's new in this fork](#whats-new-in-this-fork-sd-16) and the [CHANGELOG](CHANGELOG.md).
->
-> This fork of yang1190's fork, maintained by [@Tat9naGor](https://github.com/Tat9naGor), adds
-> **Substance 3D Designer 14.1.1** support behind version gates (SD 15 / 16 behaviour unchanged)
-> and `render_node_preview` — see [SD 14.1.1 support](#sd-1411-support).
 
 ---
 
@@ -57,6 +53,13 @@ paths are kept and selected at runtime (`common._sd_caps()`).
 
 Not available on 14 (the SD API / library lacks them): graph material models (OpenPBR), the 3D SDF
 library and Shape splatter v2 — those tools answer with a clear "SD 16+" message.
+
+**Not re-tested on SD 15 / 16 with these changes.** The SD 15 / 16 code paths are unchanged by
+design (version gates), with two exceptions that apply to every version: the `terracotta` recipe
+gains an `auto_levels` node (a no-op where Cells 1 already spans 0–1), and output nodes get their
+identifier even where usages are off (SD 15). `auto_levels` is not in the SD 16 port snapshot yet
+(`UNMEASURED` in `tests/test_offline.py`); rerun `tests/update_port_snapshot.py` and
+`tests/run_regression.py` on SD 16 to close that gap.
 
 ---
 

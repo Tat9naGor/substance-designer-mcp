@@ -8,10 +8,8 @@ An MCP integration that lets AI clients drive Adobe Substance 3D Designer: build
 and connect nodes, set parameters, build materials from recipes, and look at the result
 (thumbnails + pixel statistics).
 
-This fork: `Tat9naGor/substance-designer-mcp` (remote `zai`), based on `yang1190`'s fork
-(remote `yang1190`, SD 15/16, modular plugin), itself a fork of `matthieuhuguet`'s original
-(remote `origin`, SD 15). Goal of this fork: **Substance 3D Designer 14.1.1** support, keeping
-15/16 behind version gates. Plan and measured facts: `docs/SD14_UPGRADE_PLAN.md`.
+Supported: Substance 3D Designer 14.1.x, 15.x and 16.0.x; version-dependent behaviour is selected
+at runtime (see "SD versions").
 
 ## Architecture
 
@@ -61,7 +59,7 @@ wrapper in the bridge.
 All version-dependent behaviour goes through `common._sd_caps()`; do not add scattered
 `_sd_major()` checks. Prefer feature detection (API import, library file present) where possible.
 
-| | 14.1.1 (target) | 15.x | 16.0.x |
+| | 14.1.1 | 15.x | 16.0.x |
 |---|---|---|---|
 | Python / Qt | 3.11.6 / PySide6 6.5.7 | 3.11 / PySide6 | 3.13 / PySide6 6.8 |
 | Output usages (`SDUsage.sNew`) | yes (probed safe) | **no: hung 15.0.3** | yes |
@@ -69,9 +67,9 @@ All version-dependent behaviour goes through `common._sd_caps()`; do not add sca
 | SDF / 3D viewer / Shape splatter v2 | no (`3d_functions.sbs` missing) | no | yes |
 | Settings folder (`*.sbsprj`) | `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/` (flat) | per version | `.../16.0/` |
 
-On this machine the running SD is the **Adobe** install
-(`C:\Program Files\Adobe\Adobe Substance 3D Designer`). `C:\Program Files\Allegorithmic\...` is an
-old unrelated install: never read library files from it.
+On Windows, SD 14+ is the **Adobe** install (`C:\Program Files\Adobe\Adobe Substance 3D Designer`).
+A leftover `C:\Program Files\Allegorithmic\Substance Designer` is an older product with other
+node names: never read library files from it.
 
 ## Hard rules with a live SD
 
@@ -119,5 +117,3 @@ The AI client's connector config must point `uv run --directory` at this repo's 
 - `graph_identifier=None` means the graph currently active in SD's UI.
 - Library references accepted everywhere: `perlin_noise`, `pkg:///perlin_noise`,
   `file.sbs#graph`, `D:/libs/x.sbs#graph`. `?dependency=N` URLs are session-specific.
-- Branches: `branch/sd-agnostic/*` = version-independent work (upstreamable),
-  `branch/sd14/*` = SD 14 specifics. Keep history linear on top of `yang1190/master`.
