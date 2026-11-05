@@ -260,11 +260,14 @@ class RenderMixin(object):
         thumbnail_size = max(16, min(int(thumbnail_size or 256), 1024))
         textures = [p for p in node.getProperties(SDPropertyCategory.Output)
                     if p.getType().getClassName() == "SDTypeTexture"]
-        if output_port:
-            textures = [p for p in textures if p.getId() == output_port]
         if not textures:
-            raise ValueError("Node '{}' has no texture output{}.".format(
-                node_id, " '{}'".format(output_port) if output_port else ""))
+            raise ValueError("Node '{}' has no texture output.".format(node_id))
+        if output_port:
+            match = [p for p in textures if p.getId() == output_port]
+            if not match:
+                raise ValueError("Node '{}' has no texture output '{}'. Outputs: {}".format(
+                    node_id, output_port, [p.getId() for p in textures]))
+            textures = match
         prop = textures[0]
 
         tmp = None

@@ -131,9 +131,27 @@ Done: `render_node_preview` (temp output node), Qt-free PNG encoder, SD 14 pixel
 Todo: end-to-end through the bridge after Phase 0; optional `max_size` for `export_outputs`;
 check the open-in-editor requirement (probes ran on an open graph); 16-bit and float formats on 14.
 
+**Status: done (2026-11-05), branch `branch/sd14/phase4-previews`.** All on 14.1.1:
+- End to end through the bridge: done in Phase 0 (images reach the client).
+- No editor needed: a graph built with `open_in_editor=false` (`current_graph: null`) previews
+  fine, intermediate library node included.
+- Formats read correctly: RGBA8, LUM16, LUM16F (`$format`=2), LUM32F (`$format`=3); the
+  temporary output node keeps the source format. `$format` on a *library instance* did not change
+  its output (the library graph defines it); on atomic nodes it does.
+- Multi-output nodes: `output_port` picks the port (`weave_generator` `Mask_1`); a wrong port now
+  lists the available ones.
+- Temporary output nodes are always removed (node count unchanged after 6 previews).
+- Bridge offline tests for `render_node_preview` (image conversion, port passthrough, error text).
+- Dropped: `max_size` for `export_outputs`. Export is meant for full-resolution files; the
+  render tools already take `thumbnail_size`.
+
 ### Phase 5: Cleanup and trimming (decision for the user)
 Keep SD 16 code gated (small diff against upstream, easy to merge yang1190 updates) or delete it
 (smaller fork). Recommendation: keep, gated, until Phase 3 is green.
+
+**Decision (2026-11-05): keep the SD 15/16 code behind the gates.** Goal: offer the work upstream
+(yang1190, then the original) once it is stable. A SD 16 install is available to rerun the 16
+checks (`update_port_snapshot.py` for `auto_levels`, full regression) before proposing a merge.
 
 ### Phase 6: Docs, tests, packaging
 - README: "SD 14.1.1" section (install path, tested versions), CLAUDE.md: replace SD 15-only

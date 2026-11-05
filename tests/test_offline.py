@@ -207,7 +207,7 @@ class TestBridge(unittest.TestCase):
                          "build_function_graph", "build_sdf_scene", "set_shape_splatter_sdf",
                          "create_batch_graph", "arrange_nodes", "list_material_models",
                          "list_library_paths", "add_library_path", "remove_library_path",
-                         "rescan_library"):
+                         "rescan_library", "render_node_preview"):
             self.assertIn(required, names)
         props = {t.name: set(t.inputSchema.get("properties", {})) for t in tools}
         self.assertIn("material_model", props["build_material_graph"])
@@ -230,6 +230,40 @@ class TestBridge(unittest.TestCase):
         kinds = [getattr(c, "type", None) for c in items]
         self.assertIn("image", kinds)
         self.assertNotIn("thumbnail_png_base64", items[0].text)
+
+    def test_render_node_preview_returns_image(self):
+        png = _tiny_png()
+        sent = {}
+
+        async def fake(cmd, params=None):
+            sent.update(cmd=cmd, params=params)
+            return json.dumps({"graph": "g", "node_id": "7", "port": "Mask_1",
+                               "stats": {"flat": False},
+                               "thumbnail_png_base64": base64.b64encode(png).decode()})
+        orig = self.b._async_send
+        self.b._async_send = fake
+        try:
+            res = asyncio.run(self.b.mcp.call_tool(
+                "render_node_preview", {"node_id": "7", "output_port": "Mask_1"}))
+        finally:
+            self.b._async_send = orig
+        items = res[0] if isinstance(res, tuple) else res
+        self.assertEqual([getattr(c, "type", None) for c in items], ["text", "image"])
+        self.assertNotIn("thumbnail_png_base64", items[0].text)
+        self.assertEqual((sent["cmd"], sent["params"]["output_port"]),
+                         ("render_node_preview", "Mask_1"))
+
+    def test_render_node_preview_passes_errors_through(self):
+        async def fake(cmd, params=None):
+            return "Error: Node '7' has no texture output 'x'. Outputs: ['output']"
+        orig = self.b._async_send
+        self.b._async_send = fake
+        try:
+            res = asyncio.run(self.b.mcp.call_tool("render_node_preview", {"node_id": "7"}))
+        finally:
+            self.b._async_send = orig
+        items = res[0] if isinstance(res, tuple) else res
+        self.assertIn("Outputs: ['output']", items[0].text)
 
 
 # Structure copied from SD 16.0.5's settings folder (paths made relative).
