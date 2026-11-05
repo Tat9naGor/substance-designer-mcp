@@ -109,6 +109,23 @@ Done when: `validate_library` reports 0 failures (or a documented known-broken l
 
 Done when: failing set is explained and frozen in the 14 baseline.
 
+**Status: done (2026-11-05), branch `branch/sd14/phase3-regression`.**
+- First full run on 14.1.1: 97/98. Only `terracotta` failed (all outputs flat). Traced node by node
+  with `render_node_preview`: SD 14's Cells 1 outputs ~0.63-1.0 (SD 16's `cells_1` is a newer
+  version with more parameters), the following levels clipped it to white and the Add blend kept
+  it there. Fix: `auto_levels` after Cells 1 (no-op where Cells is already 0-1).
+- Second full run: **98/98** (79 recipes, 8 heightmaps, 475 library graphs + rebuilds after the
+  sweep, custom library, pixel processor function graph). SD 16 checks (OpenPBR, SDF, splatter)
+  are skipped below SD 16; the pixel processor check now runs on every version.
+- `tests/regression_baseline_sd14.json`: empty known list + history; the runner picks
+  `regression_baseline_sd<major>.json` automatically.
+- Port snapshots per version: `tests/data/sd_node_ports_sd14.json` (measured on 14.1.1) and
+  `_sd16.json` (renamed, from 16.0.5). SD 14 vs 16: identical ports; 16 only adds parameters
+  (`cells_1` +10, `clouds_2` +4, `perlin_noise` +2, ...) that no recipe uses. `auto_levels` is not
+  measured on 16 (listed in `UNMEASURED` in the offline test).
+- Note: `terracotta` passes the non-flat check but its height is still mostly white
+  (mean ~0.9): the recipe design saturates. Quality tuning is out of scope for version support.
+
 ### Phase 4: Previews (already started)
 Done: `render_node_preview` (temp output node), Qt-free PNG encoder, SD 14 pixel-buffer read.
 Todo: end-to-end through the bridge after Phase 0; optional `max_size` for `export_outputs`;

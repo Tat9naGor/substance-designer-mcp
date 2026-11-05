@@ -8,7 +8,7 @@ Offline checks — no Substance Designer needed (runs in CI).
 * syntax of every Python file
 * recipe structure: unique aliases, connections reference existing aliases,
   every node has a type, output nodes have a usage
-* recipe ports and parameters against tests/data/sd_node_ports.json
+* recipe ports and parameters against tests/data/sd_node_ports_sd*.json
   (a snapshot taken from a live SD with tests/update_port_snapshot.py):
   from_output / to_input exist on the node type, every parameter id exists
 * bridge (skipped when the `mcp` package is missing): tool list and the
@@ -19,6 +19,7 @@ Offline checks — no Substance Designer needed (runs in CI).
 import ast
 import asyncio
 import base64
+import glob
 import importlib.util
 import json
 import os
@@ -32,7 +33,10 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLUGIN = os.path.join(ROOT, "plugin")
 SERVER = os.path.join(ROOT, "server")
-SNAPSHOT = os.path.join(ROOT, "tests", "data", "sd_node_ports.json")
+SNAPSHOTS = sorted(glob.glob(os.path.join(ROOT, "tests", "data", "sd_node_ports_sd*.json")))
+# Node types a recipe uses that were never measured on that SD version (no
+# such SD at hand). Remove an entry after rerunning update_port_snapshot.py there.
+UNMEASURED = {"sd16": {"library:auto_levels"}}
 
 
 def _load(name, path):
@@ -113,55 +117,66 @@ class TestRecipeStructure(unittest.TestCase):
         self.assertEqual(problems, [], "\n" + "\n".join(problems[:40]))
 
 
-@unittest.skipUnless(os.path.exists(SNAPSHOT), "no port snapshot (run tests/update_port_snapshot.py)")
+@unittest.skipUnless(SNAPSHOTS, "no port snapshot (run tests/update_port_snapshot.py)")
 class TestRecipePortsAgainstSnapshot(unittest.TestCase):
+    """Every recipe is checked against the snapshot of every SD version."""
+
     @classmethod
     def setUpClass(cls):
-        with open(SNAPSHOT, encoding="utf-8") as fh:
-            cls.snap = json.load(fh)
+        cls.snaps = {}
+        for path in SNAPSHOTS:
+            tag = os.path.basename(path)[len("sd_node_ports_"):-len(".json")]
+            with open(path, encoding="utf-8") as fh:
+                cls.snaps[tag] = json.load(fh)
 
-    def _entry(self, kind, key):
-        return self.snap.get(kind, {}).get(key)
+    @staticmethod
+    def _entry(snap, kind, key):
+        return snap.get(kind, {}).get(key)
 
     def test_node_types_known(self):
         missing = set()
-        for name, rec in _all_recipes().items():
-            for n in rec["nodes"]:
-                kind, key = _node_type(n)
-                e = self._entry(kind, key)
-                if e is None or "error" in e:
-                    missing.add("{}:{}".format(kind, key))
+        for tag, snap in self.snaps.items():
+            for name, rec in _all_recipes().items():
+                for n in rec["nodes"]:
+                    kind, key = _node_type(n)
+                    e = self._entry(snap, kind, key)
+                    if (e is None or "error" in e) and \
+                            "{}:{}".format(kind, key) not in UNMEASURED.get(tag, ()):
+                        missing.add("{} {}:{}".format(tag, kind, key))
         self.assertEqual(sorted(missing), [],
-                         "node types missing from the snapshot — rerun tests/update_port_snapshot.py")
+                         "node types missing from a snapshot — rerun tests/update_port_snapshot.py")
 
     def test_ports(self):
         problems = []
-        for name, rec in _all_recipes().items():
-            types = {n["id_alias"]: _node_type(n) for n in rec["nodes"]}
-            for c in rec["connections"]:
-                fe = self._entry(*types.get(c["from"], ("?", "?"))) or {}
-                te = self._entry(*types.get(c["to"], ("?", "?"))) or {}
-                fo = c.get("from_output", "unique_filter_output")
-                ti = c.get("to_input", "input1")
-                if fe.get("outputs") is not None and fo not in fe["outputs"]:
-                    problems.append("{}: {}.{} not an output (has {})".format(
-                        name, c["from"], fo, fe["outputs"]))
-                if te.get("inputs") is not None and ti not in te["inputs"]:
-                    problems.append("{}: {}.{} not an input (has {})".format(
-                        name, c["to"], ti, te["inputs"]))
+        for tag, snap in self.snaps.items():
+            for name, rec in _all_recipes().items():
+                types = {n["id_alias"]: _node_type(n) for n in rec["nodes"]}
+                for c in rec["connections"]:
+                    fe = self._entry(snap, *types.get(c["from"], ("?", "?"))) or {}
+                    te = self._entry(snap, *types.get(c["to"], ("?", "?"))) or {}
+                    fo = c.get("from_output", "unique_filter_output")
+                    ti = c.get("to_input", "input1")
+                    if fe.get("outputs") is not None and fo not in fe["outputs"]:
+                        problems.append("{} {}: {}.{} not an output (has {})".format(
+                            tag, name, c["from"], fo, fe["outputs"]))
+                    if te.get("inputs") is not None and ti not in te["inputs"]:
+                        problems.append("{} {}: {}.{} not an input (has {})".format(
+                            tag, name, c["to"], ti, te["inputs"]))
         self.assertEqual(problems, [], "\n" + "\n".join(problems[:40]))
 
     def test_parameters(self):
         problems = []
-        for name, rec in _all_recipes().items():
-            for n in rec["nodes"]:
-                e = self._entry(*_node_type(n)) or {}
-                valid = set(e.get("parameters", {})) | set(e.get("annotations", []))
-                if not valid:
-                    continue
-                for pid in (n.get("parameters") or {}):
-                    if pid not in valid:
-                        problems.append("{}: {}.{} unknown parameter".format(name, n["id_alias"], pid))
+        for tag, snap in self.snaps.items():
+            for name, rec in _all_recipes().items():
+                for n in rec["nodes"]:
+                    e = self._entry(snap, *_node_type(n)) or {}
+                    valid = set(e.get("parameters", {})) | set(e.get("annotations", []))
+                    if not valid:
+                        continue
+                    for pid in (n.get("parameters") or {}):
+                        if pid not in valid:
+                            problems.append("{} {}: {}.{} unknown parameter".format(
+                                tag, name, n["id_alias"], pid))
         self.assertEqual(problems, [], "\n" + "\n".join(problems[:40]))
 
 

@@ -103,7 +103,7 @@ uv run --directory server python ..\tests\test_offline.py
 # Against a live SD with the plugin loaded (plugin TCP port, no MCP client needed)
 python tests\run_regression.py --quick          # ~2 min smoke test
 python tests\run_regression.py                  # recipes, heightmaps, library, SD 16 features
-python tests\update_port_snapshot.py            # refresh tests\data\sd_node_ports.json after an SD change
+python tests\update_port_snapshot.py            # writes tests\data\sd_node_ports_sd<major>.json (deploy first)
 
 # Bridge by hand (normally the AI client starts it)
 uv run --directory server python sd_mcp_bridge.py --port 9881

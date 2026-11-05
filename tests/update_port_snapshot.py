@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Regenerate tests/data/sd_node_ports.json from a live Substance 3D Designer.
+Regenerate tests/data/sd_node_ports_sd<major>.json from a live Substance 3D
+Designer (one snapshot per SD major version, e.g. _sd14 and _sd16).
 
 The snapshot lists, for every node type used by the built-in recipes (atomic
 definitions and Library graphs), its input ports, output ports and parameter
 ids. tests/test_offline.py validates every recipe against it WITHOUT needing
 SD, so CI can catch wrong port names or misspelled parameters.
 
-Run after an SD update (SD running with the MCP plugin):
+Run after an SD update or a recipe change (SD running with the MCP plugin;
+the recipes are read from the DEPLOYED plugin, so deploy first):
     python tests/update_port_snapshot.py
 """
 import json
@@ -18,7 +20,7 @@ import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "data", "sd_node_ports.json")
+OUT_PATTERN = os.path.join(HERE, "data", "sd_node_ports_sd{}.json")
 
 # Executed inside SD (via the plugin's execute_code command). Writes OUT.
 SNIPPET = r'''
@@ -86,8 +88,12 @@ def _call(cmd, params, port=9881, timeout=180):
 
 
 def main():
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    code = SNIPPET.replace("__OUT__", repr(OUT.replace("\\", "/")))
+    scene = _call("get_scene_info", {}).get("result") or {}
+    major = str(scene.get("sd_version") or "0").split(".")[0]
+    out = OUT_PATTERN.format(major)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    print("SD {} -> {}".format(scene.get("sd_version"), out))
+    code = SNIPPET.replace("__OUT__", repr(out.replace("\\", "/")))
     resp = _call("execute_code", {"code": code})
     res = resp.get("result") or {}
     print(res.get("stdout", "").strip() or resp)

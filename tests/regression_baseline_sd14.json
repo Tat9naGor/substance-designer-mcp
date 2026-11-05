@@ -1,0 +1,11 @@
+{
+  "_comment": "Known problems on SD 14.x. A failing check listed here is reported as KNOWN; when it passes it is reported as FIXED - remove it from this file then.",
+  "history": [
+    "2026-11-05 (SD 14.1.1, plugin 3.10.1): 97/98 - terracotta flat (SD 14 Cells 1 outputs ~0.63-1.0, levels clipped it to white)",
+    "2026-11-05: fixed with auto_levels after Cells 1 - 98/98 (79 recipes, 8 heightmaps, 475 library graphs, pixel processor); SD 16 checks skipped"
+  ],
+  "known_issues": {
+    "recipes": {},
+    "performance": {}
+  }
+}

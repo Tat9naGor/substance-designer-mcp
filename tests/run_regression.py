@@ -16,10 +16,10 @@ What it checks
   4. library           every graph visible in SD's Library instantiates, then a
                        few recipes are rebuilt (resolution must ignore Legacy
                        packages the sweep pulled in)
-  5. openpbr           OpenPBR identifiers / dual usages on a material recipe
-  6. sdf_scene         build_sdf_scene renders a non-flat beauty pass
-  7. splatter_sdf      Shape splatter v2 scatters an SDF shape (non-flat height)
-  8. pixel_processor   build_function_graph on a pixel processor (non-flat)
+  5. openpbr           OpenPBR identifiers / dual usages on a material recipe (SD 16+)
+  6. sdf_scene         build_sdf_scene renders a non-flat beauty pass (SD 16+)
+  7. splatter_sdf      Shape splatter v2 scatters an SDF shape (SD 16+)
+  8. pixel_processor   build_function_graph on a pixel processor (non-flat, all versions)
   9. custom_library    custom Library folders (SD's watched paths, plugin
                        config, env var) are scanned and every visible graph
                        in them instantiates
@@ -27,7 +27,8 @@ What it checks
 Everything is built in a fresh, unsaved package that is closed at the end;
 open user packages are never modified.
 
-Known problems are listed in tests/regression_baseline.json. A check that
+Known problems are listed in tests/regression_baseline_sd<major>.json (falls
+back to tests/regression_baseline.json, the SD 16 baseline). A check that
 fails but is listed there is reported as KNOWN (does not fail the run); a
 listed problem that no longer occurs is reported as FIXED so the baseline can
 be trimmed. Exit code: 0 = no new failures, 1 = new failures, 2 = cannot run.
@@ -203,13 +204,17 @@ def check_build(sd, rep, section, name, build, pkg, res_log2):
             pass
 
 
+def _baseline_path(explicit, sd_major):
+    """--baseline wins; else regression_baseline_sd<major>.json when it exists,
+    else the shared regression_baseline.json (SD 16)."""
+    if explicit:
+        return explicit
+    per_version = os.path.join(HERE, "regression_baseline_sd{}.json".format(sd_major))
+    return per_version if os.path.exists(per_version) else os.path.join(HERE, "regression_baseline.json")
+
+
 def run(args):
-    baseline_path = args.baseline
-    baseline = {}
-    if baseline_path and os.path.exists(baseline_path):
-        with io.open(baseline_path, encoding="utf-8") as fh:
-            baseline = json.load(fh).get("known_issues", {})
-    rep = Report(baseline)
+    rep = Report({})
     sd = SDClient(port=args.port, timeout=args.timeout)
     t_start = time.time()
 
@@ -224,8 +229,18 @@ def run(args):
         "sd_version": diag.get("sd_version"), "python_version": diag.get("python_version"),
         "plugin_version": scene.get("plugin_version"), "resolution": 2 ** args.resolution,
     })
-    print("SD {} / Python {} / plugin {}".format(
-        rep.meta["sd_version"], rep.meta["python_version"], rep.meta["plugin_version"]))
+    try:
+        sd_major = int(str(diag.get("sd_version") or "0").split(".")[0])
+    except ValueError:
+        sd_major = 0
+    baseline_path = _baseline_path(args.baseline, sd_major)
+    if os.path.exists(baseline_path):
+        with io.open(baseline_path, encoding="utf-8") as fh:
+            rep.baseline = json.load(fh).get("known_issues", {})
+    rep.meta["baseline"] = os.path.basename(baseline_path)
+    print("SD {} / Python {} / plugin {} / baseline {}".format(
+        rep.meta["sd_version"], rep.meta["python_version"], rep.meta["plugin_version"],
+        rep.meta["baseline"]))
     rep.add("environment", "output_usages_enabled", bool(diag.get("output_usages_enabled")))
     rep.add("environment", "qt_binding", diag.get("qt_binding", "NONE") != "NONE",
             diag.get("qt_binding"))
@@ -288,8 +303,13 @@ def run(args):
         if not args.only:
             print("\n[custom library]")
             custom_library_checks(sd, rep)
-            print("\n[sd16 features]")
-            sd16_checks(sd, rep, pkg)
+            print("\n[function graphs]")
+            pixel_processor_check(sd, rep, pkg)
+            if sd_major >= 16:
+                print("\n[sd16 features]")
+                sd16_checks(sd, rep, pkg)
+            else:
+                print("\n[sd16 features] skipped: SD {}".format(sd_major))
     finally:
         try:
             sd.call("close_package", package_index=pkg)
@@ -382,7 +402,10 @@ def sd16_checks(sd, rep, pkg):
     finally:
         _safe_delete(sd, g, pkg)
 
-    # Pixel processor function: clouds x UV gradient
+
+def pixel_processor_check(sd, rep, pkg):
+    """Function graph on a pixel processor: clouds x UV gradient. The function
+    graph API also exists before SD 16, so this runs on every version."""
     g = "rg_pixel_processor"
     try:
         sd.call("create_graph", graph_name=g, package_index=pkg)
@@ -406,10 +429,10 @@ def sd16_checks(sd, rep, pkg):
         rend = sd.call("render_outputs", graph_identifier=g, thumbnails=False)
         flat = _flat(rend, [])
         # red must grow with x: compare against the gradient direction via stats
-        rep.add("sd16", "pixel_processor", not r["errors"] and not flat,
+        rep.add("function_graphs", "pixel_processor", not r["errors"] and not flat,
                 "errors: {} flat: {}".format(r["errors"], flat) if (r["errors"] or flat) else "")
     except Exception as e:  # noqa: BLE001
-        rep.add("sd16", "pixel_processor", False, str(e))
+        rep.add("function_graphs", "pixel_processor", False, str(e))
     finally:
         _safe_delete(sd, g, pkg)
 
@@ -459,7 +482,9 @@ def main(argv=None):
     ap.add_argument("--quick", action="store_true", help="small subset (~2 min)")
     ap.add_argument("--skip-library", action="store_true")
     ap.add_argument("--only", default="", help="only recipes/heightmaps whose name contains this")
-    ap.add_argument("--baseline", default=os.path.join(HERE, "regression_baseline.json"))
+    ap.add_argument("--baseline", default=None,
+                    help="default: regression_baseline_sd<major>.json if present, "
+                         "else regression_baseline.json")
     ap.add_argument("--report-dir", default=os.path.join(HERE, "reports"))
     args = ap.parse_args(argv)
     return run(args)

@@ -110,6 +110,7 @@ LIB = {
     "invert_grayscale":       "pkg:///invert_grayscale",
     "highpass_grayscale":     "pkg:///highpass_grayscale",
     "histogram_scan":         "pkg:///histogram_scan",
+    "auto_levels":            "pkg:///auto_levels",
     # Structural / flood-fill chain
     "edge_detect":            "pkg:///edge_detect",
     "flood_fill":             "pkg:///flood_fill",
@@ -1004,6 +1005,9 @@ def _terracotta_recipe(description, color=(0.62, 0.32, 0.18), roughness=0.82, me
     nodes = [
         {"id_alias": "tc_cells_base", "resource_url": LIB["cells_1"],      "position": [-1200, 0],
          "parameters": {"scale": {"value": 4, "type": "int"}, "disorder": {"value": 0.35, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
+        # SD 14's Cells 1 outputs ~0.63-1.0 (not 0-1): the levels below would clip it to white
+        # and the whole chain went flat. Normalise first; a no-op where Cells is already 0-1.
+        {"id_alias": "tc_cells_norm", "resource_url": LIB["auto_levels"],  "position": [-1100, -150]},
         {"id_alias": "tc_lvl_base",   "definition_id": "sbs::compositing::levels", "position": [-1000, 0],
          "parameters": {"levelinlow": [0.25, 0.25, 0.25, 0.25], "levelinhigh": [0.80, 0.80, 0.80, 0.80]}},
         {"id_alias": "tc_perlin_grn", "resource_url": LIB["perlin_noise"],  "position": [-1200, 200],
@@ -1027,7 +1031,8 @@ def _terracotta_recipe(description, color=(0.62, 0.32, 0.18), roughness=0.82, me
         {"id_alias": "tc_final",      "definition_id": "sbs::compositing::levels", "position": [0, 0]},
     ]
     connections = [
-        {"from": "tc_cells_base", "to": "tc_lvl_base",  "from_output": "output",              "to_input": "input1"},
+        {"from": "tc_cells_base", "to": "tc_cells_norm","from_output": "output",              "to_input": "Input"},
+        {"from": "tc_cells_norm", "to": "tc_lvl_base",  "from_output": "Output",              "to_input": "input1"},
         {"from": "tc_perlin_grn", "to": "tc_blend1",    "from_output": "output",              "to_input": "source"},
         {"from": "tc_lvl_base",   "to": "tc_blend1",    "from_output": "unique_filter_output","to_input": "destination"},
         {"from": "tc_perlin_dir", "to": "tc_dir_warp",  "from_output": "output",              "to_input": "inputintensity"},

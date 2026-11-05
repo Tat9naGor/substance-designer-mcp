@@ -367,7 +367,7 @@ python tests/run_regression.py --quick   # ~2 min smoke test
 python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 ```
 
-`test_offline.py` needs no Substance Designer: it checks the syntax of every file, the custom Library path logic (SD `.sbsprj` parsing with URL aliases, plugin config, env var, recursive scan with exclude patterns, `.sbs` header parsing), the recipe structure (aliases, connections, outputs), and validates every recipe connection port and parameter id against `tests/data/sd_node_ports.json` — a snapshot of the real node definitions taken from SD with `python tests/update_port_snapshot.py` (rerun it after an SD update). With the `mcp` package installed it also checks the bridge tools. `.github/workflows/ci.yml` runs it on every push.
+`test_offline.py` needs no Substance Designer: it checks the syntax of every file, the custom Library path logic (SD `.sbsprj` parsing with URL aliases, plugin config, env var, recursive scan with exclude patterns, `.sbs` header parsing), the recipe structure (aliases, connections, outputs), and validates every recipe connection port and parameter id against `tests/data/sd_node_ports_sd<major>.json` (one per SD version: `_sd14`, `_sd16`) — snapshots of the real node definitions taken from SD with `python tests/update_port_snapshot.py` (rerun it after an SD update). With the `mcp` package installed it also checks the bridge tools. `.github/workflows/ci.yml` runs it on every push.
 
 `run_regression.py` uses only the Python standard library and talks to the plugin's TCP port directly. It builds everything in a fresh unsaved package (closed at the end) and checks:
 
