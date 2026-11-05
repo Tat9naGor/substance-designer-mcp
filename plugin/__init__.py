@@ -26,8 +26,9 @@ MODULES
 RULES (SD API facts)
   - One SD call at a time; the bridge serialises commands.
   - SD API errors (APIException) derive from BaseException: catch SDError.
-  - SD 15: newNode(unknown definition) and SDUsage.sNew() hang SD; the plugin
-    validates definitions and only sets usages on SD 16+.
+  - newNode(unknown definition) hangs SD: the plugin validates definitions.
+    SDUsage.sNew() hung SD 15.0.3: usages are only set where common._sd_caps()
+    allows it (SD 14 and 16+).
   - Library node outputs are named per graph (never "unique_filter_output").
   - directionalwarp warp map input = "inputintensity".
 

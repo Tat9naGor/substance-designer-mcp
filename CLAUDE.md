@@ -1,97 +1,123 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## What This Project Is
+## What this project is
 
-A two-component MCP (Model Context Protocol) integration that lets AI clients control Adobe Substance 3D Designer 15.x via natural language. An AI client sends JSON-RPC over stdio to the bridge server, which relays commands over TCP to a plugin running inside SD's Python interpreter.
+An MCP integration that lets AI clients drive Adobe Substance 3D Designer: build graphs, create
+and connect nodes, set parameters, build materials from recipes, and look at the result
+(thumbnails + pixel statistics).
 
-## Development Commands
-
-```bash
-# Install bridge dependencies
-cd server/
-uv sync
-
-# Run the bridge server (SD must already be running)
-uv run python sd_mcp_bridge.py --port 9881
-
-# Run connection test (requires SD running with plugin loaded)
-cd tests/
-python test_connection.py
-
-# Run stdio MCP test (requires SD running)
-cd server/
-python ../tests/test_mcp_stdio.py
-```
-
-There is no build step — this is pure Python. No automated test runner is configured; tests in `tests/` require a live Substance Designer instance on `localhost:9881`.
+This fork: `Tat9naGor/substance-designer-mcp` (remote `zai`), based on `yang1190`'s fork
+(remote `yang1190`, SD 15/16, modular plugin), itself a fork of `matthieuhuguet`'s original
+(remote `origin`, SD 15). Goal of this fork: **Substance 3D Designer 14.1.1** support, keeping
+15/16 behind version gates. Plan and measured facts: `docs/SD14_UPGRADE_PLAN.md`.
 
 ## Architecture
 
 ```
-AI Client (Claude / Cursor)
-        │  stdio  (JSON-RPC / MCP protocol)
-        ▼
-server/sd_mcp_bridge.py      ← FastMCP server, Python 3.12+, uv-managed
-        │  TCP localhost:9881  (length-prefix framing)
-        ▼
-plugin/__init__.py            ← SD plugin, Python 3.11 (SD's interpreter)
-        │  sd.api
-        ▼
-Adobe Substance 3D Designer 15.x
+AI client (Claude)
+   | stdio, MCP (JSON-RPC)
+   v
+server/sd_mcp_bridge.py      FastMCP server, started by the AI CLIENT (not by SD), uv-managed
+   | TCP localhost:9881, [4-byte big-endian length][UTF-8 JSON], fresh socket per command
+   v
+plugin/ (package sd_mcp_plugin)   started by SD at launch from sduserplugins/
+   | sd.api, always on the Qt main thread (Signal/Slot dispatch)
+   v
+Substance 3D Designer
 ```
 
-### Bridge (`server/sd_mcp_bridge.py`)
+- The tool list comes from the bridge: changing `server/sd_mcp_bridge.py` needs a restart of the
+  AI client. Changing `plugin/` needs a redeploy + SD restart (no hot reload). After an SD
+  restart the bridge reconnects by itself (one socket per command).
+- Bridge tools are thin: `_async_send("<command>", params)`; the plugin does the work.
+  Image-returning tools (`render_outputs`, `render_node_preview`) turn base64 PNGs from the
+  plugin into MCP `Image` content.
 
-- Exposes ~23 MCP tools via `FastMCP`. Each tool is an `async def` that calls `_async_send()`.
-- `_async_send` → `asyncio.to_thread(_send)` → `_send_command_locked()` which opens a **fresh TCP socket per command**, sends a framed JSON command, receives a framed JSON response, and closes the socket.
-- A `threading.Lock` is held only during the socket send/receive (not across retries) — this prevents a 360-second deadlock on timeout.
-- Retries on connection errors only (up to 2 retries); timeouts are not retried.
-- Wire protocol: `[4-byte big-endian length][UTF-8 JSON payload]`
+### Plugin modules (`plugin/`)
 
-### Plugin (`plugin/__init__.py`)
+| Module | Role |
+|---|---|
+| `__init__.py` | SD entry points (`initializeSDPlugin`), starts the TCP server |
+| `transport.py` | Qt main-thread dispatcher, TCP server, Qt binding detection |
+| `handler.py` | `CommandHandler`: command table, composed from the mixins below |
+| `common.py` | shared imports/constants/pure helpers, `SDError`, `_sd_major()`, **`_sd_caps()`** |
+| `core.py` | lookup of packages/graphs/nodes, value coercion, parameters, output usages, material model |
+| `library.py` / `library_paths.py` | library node resolution by graph identifier from `<SD>/resources/packages` + custom Library folders (SD settings, `add_library_path`, `SD_MCP_LIBRARY_PATHS`) |
+| `scene_tools.py` | scene / package / graph tools, `diagnostic` |
+| `node_tools.py` | node / connection / parameter tools, `arrange_nodes` |
+| `builders.py` | `create_batch_graph`, recipe and heightmap builders |
+| `recipes.py` | 79 material recipes + 8 heightmap styles (pure data, `LIB` = `pkg:///<identifier>`) |
+| `render.py` | `render_outputs`, `render_node_preview`, `export_outputs`, `validate_library`, `close_package`; pure-Python PNG encoder (no Qt) |
+| `function_graphs.py` | function graphs on parameters, SDF, Shape splatter v2 (mostly SD 16) |
+| `sd_documentation.py` | embedded knowledge base for `list_documentation` (`sd14_notes`, `sd16_changes`, ...) |
 
-- Loaded by SD at startup from the `sduserplugins/` directory.
-- Starts a TCP server on port 9881 in a daemon thread (`SDMCPServer`).
-- All SD API calls are dispatched to Qt's main thread via a `Signal/Slot` queued connection (`_Invoker` / `MainThreadDispatcher`). This is mandatory — the SD API is not thread-safe.
-- `CommandHandler` maps command type strings to handler methods.
-- `_safe_connect()` validates port IDs before calling SD (wrong port ID = crash).
-- `_set_node_params()` reads the actual SD property type via `getType().getId()` and coerces Python values accordingly — mixing SDValueInt into a float param crashes SD silently.
+To add a command: method on the right mixin, entry in `handler.py` `HANDLERS`, `@mcp.tool()`
+wrapper in the bridge.
 
-### Recipe System (`plugin/recipes.py`, `plugin/sd_documentation.py`)
+## SD versions
 
-- `RECIPE_REGISTRY`: dict of named material recipes (79 entries). Each recipe is a dict with `nodes` (node specs with `id_alias`, `definition_id`/`library_keyword`, `parameters`, `position`) and `connections` (alias → alias wiring).
-- `HEIGHTMAP_RECIPES`: dict of callables that accept `detail_level`, `scale`, `disorder` and return a recipe dict.
-- `build_material_graph` / `build_heightmap_graph` delegate to `create_batch_graph` after looking up the recipe.
-- `sd_documentation.py` is a static knowledge base (no internet required) queried via the `list_documentation` tool.
+All version-dependent behaviour goes through `common._sd_caps()`; do not add scattered
+`_sd_major()` checks. Prefer feature detection (API import, library file present) where possible.
 
-## Critical SD 15.x Constraints
+| | 14.1.1 (target) | 15.x | 16.0.x |
+|---|---|---|---|
+| Python / Qt | 3.11.6 / PySide6 6.5.7 | 3.11 / PySide6 | 3.13 / PySide6 6.8 |
+| Output usages (`SDUsage.sNew`) | yes (probed safe) | **no: hung 15.0.3** | yes |
+| Graph material model (OpenPBR) | no (API missing) | no | yes |
+| SDF / 3D viewer / Shape splatter v2 | no (`3d_functions.sbs` missing) | no | yes |
+| Settings folder (`*.sbsprj`) | `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/` (flat) | per version | `.../16.0/` |
 
-These are hard API limits — violating them hangs or crashes SD permanently (requiring restart):
+On this machine the running SD is the **Adobe** install
+(`C:\Program Files\Adobe\Adobe Substance 3D Designer`). `C:\Program Files\Allegorithmic\...` is an
+old unrelated install: never read library files from it.
 
-- **ONE tool call at a time** — never issue parallel calls to any SD tool
-- `SDUsage.sNew()` — hangs SD permanently; do not call it
-- `graph.newNode(unknown_definition_id)` — hangs SD permanently; always validate against `graph.getNodeDefinitions()` first
-- `arrange_nodes()` — destroys **all** connections; use `move_node()` instead
-- Library node outputs are **never** `"unique_filter_output"` — always call `get_node_info` first to discover actual port IDs
-- `directionalwarp` warp-map input port = `"inputintensity"` (NOT `"inputgradient"`)
-- `SDValueInt2/3/4` applied to float-type parameters silently crashes SD — `_infer_type()` always returns float vectors for lists; use explicit `{"value": ..., "type": "int2"}` only when the SD property is confirmed as int2
+## Hard rules with a live SD
 
-## Key Conventions
+- **One SD tool call at a time.** Never parallel calls to the bridge.
+- Unknown API behaviour can hang SD (needs a restart): probe it with `execute_sd_code` in a
+  throw-away package (`pkg_mgr.newUserPackage()` ... `unloadUserPackage`), with nothing unsaved
+  open in SD.
+- `graph.newNode()` with an unknown definition id hangs SD: the plugin validates against
+  `graph.getNodeDefinitions()`; keep it that way.
+- SD API errors (`APIException`) derive from `BaseException`: catch `SDError`, not `Exception`.
+- Library node outputs have per-graph names (never `unique_filter_output`): call `get_node_info`
+  before connecting. `directionalwarp` warp map input is `inputintensity`.
+- `arrange_nodes` may drop connections; prefer `move_node`.
+- Reading a node's own texture after `compute()` is unreliable (None for isolated / freshly edited
+  nodes on 14.1.1). Read textures through an **output node**: `render_outputs`, or
+  `render_node_preview` (temporary output node, deleted afterwards).
+- Clean up test packages (`close_package`) after experiments.
 
-**Node identification**: Atomic nodes (blend, levels, blur, etc.) all output from `"unique_filter_output"`. Library nodes (Cells, Perlin, clouds_2, etc.) have custom output names — always run `get_node_info` before connecting them.
+## Development commands
 
-**Value types**: Bare Python ints are treated as `"float"` by `_infer_type()` because most SD parameters are float. Pass `{"value": x, "type": "int"}` explicitly for integer enum parameters (e.g. `blendingmode`).
+```powershell
+# Deploy the plugin into SD (backs up the old one outside sduserplugins), then restart SD
+.\scripts\deploy.ps1 -Force
 
-**Graph resolution**: When `graph_identifier=None`, the plugin uses the currently active graph in SD's UI. The bridge passes `None` when the parameter is omitted.
+# Offline tests (no SD needed; bridge tests need the `mcp` package -> run with the server venv)
+python tests\test_offline.py
+uv run --directory server python ..\tests\test_offline.py
 
-**Batch creation**: `create_batch_graph` is the core builder used internally by `build_material_graph` and `apply_recipe`. Node specs use `id_alias` as a reference key for wiring connections. Library nodes use `library_keyword` (auto-resolved to `pkg://` URL) or explicit `resource_url`.
+# Against a live SD with the plugin loaded (plugin TCP port, no MCP client needed)
+python tests\run_regression.py --quick          # ~2 min smoke test
+python tests\run_regression.py                  # recipes, heightmaps, library, SD 16 features
+python tests\update_port_snapshot.py            # refresh tests\data\sd_node_ports.json after an SD change
 
-**Port**: Both bridge and plugin default to `9881`. The old default `9880` (still appears in `tests/`) is incorrect — always use `9881`.
-
-**Plugin install path** (Windows):
+# Bridge by hand (normally the AI client starts it)
+uv run --directory server python sd_mcp_bridge.py --port 9881
 ```
-%USERPROFILE%\Documents\Adobe\Adobe Substance 3D Designer\python\sduserplugins\sd_mcp_plugin\
-```
-SD auto-loads all plugins from `sduserplugins/` on startup — no registration needed.
+
+Deployed plugin: `%USERPROFILE%\Documents\Adobe\Adobe Substance 3D Designer\python\sduserplugins\sd_mcp_plugin\`.
+The AI client's connector config must point `uv run --directory` at this repo's `server/`.
+
+## Conventions
+
+- Bare Python ints are treated as float parameters; pass `{"value": x, "type": "int"}` for int
+  enums (e.g. `blendingmode`). Lists become float vectors; int2/3/4 only when the SD property is.
+- `graph_identifier=None` means the graph currently active in SD's UI.
+- Library references accepted everywhere: `perlin_noise`, `pkg:///perlin_noise`,
+  `file.sbs#graph`, `D:/libs/x.sbs#graph`. `?dependency=N` URLs are session-specific.
+- Branches: `branch/sd-agnostic/*` = version-independent work (upstreamable),
+  `branch/sd14/*` = SD 14 specifics. Keep history linear on top of `yang1190/master`.
