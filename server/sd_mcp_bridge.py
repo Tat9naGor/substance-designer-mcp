@@ -405,7 +405,8 @@ async def create_output_node(ctx: Context,
     """
     Create an output node with a specific PBR usage in Substance Designer.
     - usage: baseColor, normal, height, roughness, metallic, ambientOcclusion, emissive, opacity
-      (on SD 16+ the usage is written to the node so the 3D view / OpenPBR picks it up)
+      (on SD 14 and 16+ the usage is written to the node so the 3D view / OpenPBR picks it
+      up; the output identifier, e.g. 'height', is set on every version)
     - label: display label (defaults to usage name)
     - graph_identifier: target graph (None = current)
     - position: [x, y]

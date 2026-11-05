@@ -65,6 +65,19 @@ plus `SD_MCP_FORCE_*` env overrides (already exists for usages).
 
 Done when: SD16-only tools fail with a readable message on 14, never hang or crash.
 
+**Status: done (2026-11-05), branch `branch/sd14/phase1-version-gates`.**
+- `common._sd_caps()`: `output_usages` on 14 and 16+ (off on 15), `material_model` on 16+;
+  `SD_MCP_FORCE_USAGES=1/0` overrides. Function graphs / SDF stay detected at call time (already
+  readable errors on 14).
+- Probed on 14.1.1 in a throw-away package: `SDUsage.sNew()` does not hang; usages + identifier
+  write and read back. Through the tools: `create_output_node` sets usage, outputs are named
+  `height` / `basecolor`.
+- The output identifier is now set even without usages (would affect SD 15, untested there).
+- On 14: `list_material_models` -> `supported: false`, `list_sdf_functions` -> "SD 16+ required",
+  `list_function_nodes` works (function graph API exists; `build_function_graph` for pixel
+  processors still to verify in Phase 3/4).
+- Offline tests for the caps table and the PNG encoder; `sd14_notes` in the knowledge base.
+
 ### Phase 2: Library resolution on 14
 1. Run `validate_library` in batches (offset/limit) on 14.1.1: every identifier instantiates.
 2. Fix library root detection if `<SD>` path detection assumes the 15/16 layout

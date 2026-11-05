@@ -3,7 +3,6 @@ Shared SD helpers: application objects, package/graph/node lookup,
 value conversion, parameter setting, output usages and material model.
 """
 
-import os
 import sd
 from .common import (
     ColorRGBA,
@@ -34,7 +33,7 @@ from .common import (
     _infer_type,
     _log,
     _sanitize_identifier,
-    _sd_major,
+    _sd_caps,
     _usage_key,
     float2,
     float3,
@@ -64,12 +63,9 @@ class SDContextMixin(object):
             return "unknown"
 
     def _usages_supported(self):
-        # SDUsage.sNew() was reported to hang SD 15.0.3; verified OK on 16.0.5.
         if SDUsage is None:
             return False
-        if os.environ.get("SD_MCP_FORCE_USAGES") == "1":
-            return True
-        return _sd_major() >= 16
+        return _sd_caps()["output_usages"]
 
     @staticmethod
     def _graph_material_model(graph):
@@ -104,8 +100,10 @@ class SDContextMixin(object):
         graph's material model pick it up. With an OpenPBR graph the output gets
         the OpenPBR identifier and usages (+ legacy alias), exactly like SD 16's
         OpenPBR template; otherwise the legacy metallic/roughness usage.
-        Returns the list of usage names that were set, or None."""
-        if not usage or not self._usages_supported():
+        Returns the list of usage names that were set, or None.
+        The identifier is set even where usages are not (SD 15), so outputs are
+        named 'height', 'basecolor'... instead of 'output', 'output_1'..."""
+        if not usage:
             return None
         key = _usage_key(usage)
         model = self._graph_material_model(graph) if graph is not None else ""
@@ -117,14 +115,17 @@ class SDContextMixin(object):
             names = [name]
         else:
             ident, names = _sanitize_identifier(usage).lower(), [usage]
-        try:
-            arr = SDValueArray.sNew(SDTypeUsage.sNew(), 0)
-            for name in names:
-                arr.pushBack(SDValueUsage.sNew(SDUsage.sNew(name, "RGBA", "")))
-            node.setAnnotationPropertyValueFromId("usages", arr)
-        except SDError as e:
-            _log("Warning: could not set usage '{}': {}".format(usage, e))
-            return None
+        if self._usages_supported():
+            try:
+                arr = SDValueArray.sNew(SDTypeUsage.sNew(), 0)
+                for name in names:
+                    arr.pushBack(SDValueUsage.sNew(SDUsage.sNew(name, "RGBA", "")))
+                node.setAnnotationPropertyValueFromId("usages", arr)
+            except SDError as e:
+                _log("Warning: could not set usage '{}': {}".format(usage, e))
+                names = None
+        else:
+            names = None
         try:
             if graph is not None:
                 ident = self._unique_output_identifier(graph, ident, node)
@@ -148,7 +149,7 @@ class SDContextMixin(object):
     def _apply_material_model(self, graph, material_model=None):
         """material_model: None = SD default for this version ('openpbr_v1_1' on
         SD 16+), '' = leave Undefined, or an identifier from list_material_models."""
-        if _sd_major() < 16:
+        if not _sd_caps()["material_model"]:
             return None
         if material_model is None:
             material_model = DEFAULT_MATERIAL_MODEL_SD16

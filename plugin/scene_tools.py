@@ -11,6 +11,7 @@ from .common import (
     SDSBSCompGraph,
     _sanitize_identifier,
     _sd_major,
+    _sd_caps,
 )
 from .transport import (
     _Invoker,
@@ -248,6 +249,7 @@ class SceneToolsMixin(object):
         results["python_version"] = sys.version.split()[0]
         results["sd_major"] = _sd_major()
         results["output_usages_enabled"] = self._usages_supported()
+        results["sd_caps"] = _sd_caps()
         # Qt binding
         results["qt_binding"] = _QT_BINDING_USED or "NONE"
         results["pyside_path"] = _pyside_path or "native (no injection needed)"

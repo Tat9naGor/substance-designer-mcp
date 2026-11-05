@@ -3,6 +3,7 @@ Shared imports, constants and pure helpers for the SD MCP plugin
 (no SD state, no Qt). Imported by every other module.
 """
 
+import os
 import re
 
 import sd
@@ -240,6 +241,24 @@ def _sd_version_tuple():
 def _sd_major():
     return _sd_version_tuple()[0]
 
+def _sd_caps(major=None):
+    """Version-dependent features, in one place. Measured, not guessed:
+      output_usages   SDUsage.sNew() hung SD 15.0.3; OK on 14.1.1 and 16.0.5.
+                      SD_MCP_FORCE_USAGES=1/0 overrides.
+      material_model  graph material models (OpenPBR...) exist from SD 16
+                      (sd.api.sdmaterialmodeldescription is missing on 14.1.1).
+    Function graphs and SDF are detected from the API/library at call time."""
+    if major is None:
+        major = _sd_major()
+    caps = {
+        "output_usages": major == 14 or major >= 16,
+        "material_model": major >= 16,
+    }
+    force = os.environ.get("SD_MCP_FORCE_USAGES")
+    if force in ("0", "1"):
+        caps["output_usages"] = force == "1"
+    return caps
+
 # Standard PBR output usages: name -> (components, color space)
 # Legacy PBR output usages (Adobe Standard Material / metallic-roughness):
 #   key -> (identifier, usage name). SD's own templates use components RGBA and
@@ -381,6 +400,7 @@ __all__ = [
     '_coerce_type',
     '_sd_version_tuple',
     '_sd_major',
+    '_sd_caps',
     'OUTPUT_USAGES',
     'OPENPBR_OUTPUTS',
     '_usage_key',

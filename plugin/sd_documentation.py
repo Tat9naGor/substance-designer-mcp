@@ -1432,6 +1432,25 @@ SHORTCUTS = {
 # ════════════════════════════════════════════════════════════════════════════
 
 CONCEPTS = {
+    "sd14_notes": {
+        "name": "Substance 3D Designer 14.1.1 — what the MCP plugin can do there",
+        "description": (
+            "SD 14.1.1 (Adobe install) embeds Python 3.11 and PySide6 6.5. The built-in "
+            "library in <SD>/resources/packages has every graph the recipes use. Version-"
+            "dependent behaviour is listed in common._sd_caps()."
+        ),
+        "key_facts": [
+            "Output usages work: SDUsage.sNew() is safe on 14.1.1 (it hung 15.0.3), so "
+            "output nodes get usages and identifiers (height, basecolor...)",
+            "No graph material models (OpenPBR...): list_material_models returns "
+            "supported=false, material_model arguments are ignored",
+            "No 3D SDF library (3d_functions.sbs): SDF tools answer 'SD 16+ required'",
+            "Function graph API exists (pixel / value processor); SD 16-only targets "
+            "(3D viewer, Shape splatter v2) do not",
+            "A node's own output texture is not reliably readable after compute(); read it "
+            "through an output node (render_outputs, render_node_preview)",
+        ],
+    },
     "sd16_changes": {
         "name": "Substance 3D Designer 16.0 — what changed for the MCP plugin",
         "description": (
@@ -1445,7 +1464,8 @@ CONCEPTS = {
             "Several identifiers exist in multiple files; the plugin picks the version shown in "
             "the Library (no hideInLibrary). Legacy copies have other port names "
             "(e.g. clouds_2 Legacy outputs 'Clouds_2' instead of 'output')",
-            "Output nodes get real usages (baseColor/normal/...) on SD 16+ via SDUsage.sNew",
+            "Output nodes get real usages (baseColor/normal/...) on SD 14 and 16+ via "
+            "SDUsage.sNew (not on 15: it hung 15.0.3)",
             "Graph material model = annotation 'material_model': openpbr_v1_1 (default), "
             "adobe_standard_material_v4_0, usd_preview_surface, '' (Undefined)",
             "Legacy PBR usages are mapped automatically by OpenPBR in the 3D view",

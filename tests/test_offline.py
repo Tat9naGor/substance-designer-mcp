@@ -277,6 +277,55 @@ _SBS = (b'<?xml version="1.0" encoding="UTF-8"?><package><identifier v="Unsaved 
         b'<function><identifier v="my_fn"/><uid v="4"/></function></content></package>')
 
 
+def _functions(path, names, ns):
+    """Exec selected top-level functions of a plugin module (which imports sd
+    at module level, so it cannot be imported offline)."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+    exec(compile(ast.Module(body, []), path, "exec"), ns)
+    return ns
+
+
+class TestSdCaps(unittest.TestCase):
+    def setUp(self):
+        self.ns = _functions(os.path.join(PLUGIN, "common.py"), {"_sd_caps"},
+                             {"os": os, "_sd_major": lambda: 0})
+        self.env = os.environ.pop("SD_MCP_FORCE_USAGES", None)
+
+    def tearDown(self):
+        os.environ.pop("SD_MCP_FORCE_USAGES", None)
+        if self.env is not None:
+            os.environ["SD_MCP_FORCE_USAGES"] = self.env
+
+    def test_versions(self):
+        caps = self.ns["_sd_caps"]
+        self.assertEqual(caps(14), {"output_usages": True, "material_model": False})
+        self.assertEqual(caps(15), {"output_usages": False, "material_model": False})
+        self.assertEqual(caps(16), {"output_usages": True, "material_model": True})
+        self.assertEqual(caps(0)["output_usages"], False)  # version unknown
+
+    def test_force_usages(self):
+        caps = self.ns["_sd_caps"]
+        os.environ["SD_MCP_FORCE_USAGES"] = "1"
+        self.assertTrue(caps(15)["output_usages"])
+        os.environ["SD_MCP_FORCE_USAGES"] = "0"
+        self.assertFalse(caps(16)["output_usages"])
+
+
+class TestPngEncoder(unittest.TestCase):
+    def test_png_roundtrip(self):
+        ns = _functions(os.path.join(PLUGIN, "render.py"), {"_png_bytes", "_encode_png"},
+                        {"struct": struct, "zlib": zlib})
+        png = ns["_encode_png"](2, 1, 4, [[1.0, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0]])
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", png[16:24]), (2, 1))
+        idat = png.index(b"IDAT")
+        n = struct.unpack(">I", png[idat - 4:idat])[0]
+        raw = zlib.decompress(png[idat + 4:idat + 4 + n])
+        self.assertEqual(raw, b"\x00" + bytes((255, 128, 0, 255, 0, 0, 255, 255)))
+
+
 class TestLibraryPaths(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
